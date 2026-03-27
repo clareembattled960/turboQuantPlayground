@@ -71,7 +71,7 @@ Requires Python 3.11+.
 
 ```bash
 # Clone and setup
-git clone https://github.com/<your-user>/turboQuantPlayground.git
+git clone https://github.com/yzamari/turboQuantPlayground.git
 cd turboQuantPlayground
 python -m venv venv && source venv/bin/activate
 
@@ -294,6 +294,28 @@ python notebooks/04_kv_cache_demo.py              # Full KV cache + needle-in-ha
 - **Google Research Blog**: [TurboQuant: Redefining AI Efficiency with Extreme Compression](https://research.google/blog/turboquant-redefining-ai-efficiency-with-extreme-compression/)
 - **Companion papers**: [PolarQuant (AISTATS 2026)](https://arxiv.org/abs/2502.02617), [QJL (AAAI 2025)](https://arxiv.org/abs/2406.03482)
 - **Upstream implementations**: [0xSero/turboquant](https://github.com/0xSero/turboquant) (Triton), [tonbistudio/turboquant-pytorch](https://github.com/tonbistudio/turboquant-pytorch) (PyTorch)
+
+## Citation
+
+If you use this code in your research, please cite the original TurboQuant paper:
+
+```bibtex
+@inproceedings{zandieh2026turboquant,
+  title     = {TurboQuant: Online Vector Quantization with Near-optimal Distortion Rate},
+  author    = {Zandieh, Amir and Han, Insu and Daliri, Majid and Karbasi, Amin},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2026},
+  url       = {https://arxiv.org/abs/2504.19874}
+}
+```
+
+## Acknowledgments
+
+This project is a community port. All credit for the algorithm goes to the original authors (Zandieh et al.). Thanks to:
+- [0xSero/turboquant](https://github.com/0xSero/turboquant) -- the upstream NVIDIA Triton implementation
+- [tonbistudio/turboquant-pytorch](https://github.com/tonbistudio/turboquant-pytorch) -- PyTorch reference
+- [RecursiveIntell/turbo-quant](https://github.com/RecursiveIntell/turbo-quant) -- Rust implementation
+- The [MLX](https://github.com/ml-explore/mlx) team at Apple for the Metal kernel framework
 
 ## License
 

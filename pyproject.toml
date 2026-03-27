@@ -9,10 +9,35 @@ description = "TurboQuant (ICLR 2026) ported to Apple Silicon — KV cache compr
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
+authors = [
+    {name = "Yahav Zamari", email = "yzamari@users.noreply.github.com"},
+]
+keywords = [
+    "turboquant", "kv-cache", "quantization", "mlx", "apple-silicon",
+    "metal", "llm", "transformers", "attention", "inference",
+    "compression", "iclr", "polarquant", "qjl",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "numpy>=1.24",
     "scipy>=1.10",
 ]
+
+[project.urls]
+Homepage = "https://github.com/yzamari/turboQuantPlayground"
+Repository = "https://github.com/yzamari/turboQuantPlayground"
+Issues = "https://github.com/yzamari/turboQuantPlayground/issues"
+Paper = "https://arxiv.org/abs/2504.19874"
 
 [project.optional-dependencies]
 mlx = ["mlx>=0.22"]
