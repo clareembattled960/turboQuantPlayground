@@ -105,6 +105,22 @@ def _unpack_values(vq: ValueQuantized, backend: str = None):
 def dequantize_values(vq: ValueQuantized, group_size: int = 32, backend: str = None):
     """Dequantize value vectors from bit-packed format."""
     B = get_backend(backend)
+
+    # Try fused Metal kernel for MLX backend
+    if B.BACKEND_NAME == "mlx":
+        try:
+            from turboquant_mac.backends.metal_kernels import turboquant_value_dequant_metal
+            # Infer d from packed data and bits
+            packed_d = vq.data.shape[-1]
+            vals_per_byte = 4 if vq.bits == 2 else (2 if vq.bits == 4 else 1)
+            d = packed_d * vals_per_byte
+            return turboquant_value_dequant_metal(
+                vq.data, vq.scales, vq.zeros, vq.bits, d, group_size,
+            )
+        except Exception:
+            pass
+
+    # Fallback: Python path
     data = B.to_float(_unpack_values(vq, backend))
     d = data.shape[-1]
     batch_shape = data.shape[:-1]

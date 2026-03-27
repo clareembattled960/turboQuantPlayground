@@ -12,10 +12,14 @@ import mlx.core as mx
 
 from turboquant_mac.backends.metal.mse_score import get_mse_score_source
 from turboquant_mac.backends.metal.qjl_score import get_qjl_score_source
+from turboquant_mac.backends.metal.mse_encode import get_mse_encode_source
+from turboquant_mac.backends.metal.value_dequant import get_value_dequant_source
 
 # Kernel cache: (bits, d, packed_d) -> compiled kernel
 _mse_kernel_cache: dict = {}
 _qjl_kernel_cache: dict = {}
+_mse_encode_kernel_cache: dict = {}
+_value_dequant_kernel_cache: dict = {}
 
 
 def _get_packing_params(bits: int) -> tuple[int, int]:
@@ -27,6 +31,99 @@ def _get_packing_params(bits: int) -> tuple[int, int]:
         return 4, 2
     else:
         return 8, 1
+
+
+def turboquant_value_dequant_metal(
+    packed: mx.array,    # (..., packed_d) uint8 packed values
+    scales: mx.array,    # (..., n_groups) per-group scales
+    zeros: mx.array,     # (..., n_groups) per-group zeros
+    bits: int,
+    d: int,
+    group_size: int = 32,
+) -> mx.array:
+    """
+    Fused Metal kernel: unpack bits + dequantize values in one GPU dispatch.
+
+    Combines bit-unpacking, int-to-float conversion, and affine transform
+    (val * scale + zero) into a single kernel, avoiding intermediate arrays.
+    """
+    orig_shape = packed.shape  # (..., packed_d)
+    batch_shape = orig_shape[:-1]
+    n_batch = 1
+    for s in batch_shape:
+        n_batch *= s
+
+    flat_packed = packed.reshape(n_batch, -1).astype(mx.uint8)
+    flat_scales = scales.reshape(n_batch, -1).astype(mx.float32)
+    flat_zeros = zeros.reshape(n_batch, -1).astype(mx.float32)
+
+    cache_key = ("value_dequant", bits, d, group_size)
+    if cache_key not in _value_dequant_kernel_cache:
+        source = get_value_dequant_source(bits, d, group_size)
+        _value_dequant_kernel_cache[cache_key] = mx.fast.metal_kernel(
+            name=f"turboquant_value_dequant_b{bits}_d{d}_g{group_size}",
+            input_names=["packed", "scales", "zeros"],
+            output_names=["out"],
+            source=source,
+        )
+
+    kernel = _value_dequant_kernel_cache[cache_key]
+
+    out = kernel(
+        inputs=[flat_packed, flat_scales, flat_zeros],
+        output_shapes=[(n_batch, d)],
+        output_dtypes=[mx.float32],
+        grid=(d, n_batch, 1),
+        threadgroup=(min(d, 256), 1, 1),
+    )
+
+    return out[0].reshape(*batch_shape, d)
+
+
+def turboquant_mse_encode_metal(
+    rotated: mx.array,       # (..., D) rotated values: Pi @ x_unit
+    boundaries: mx.array,    # (n_boundaries,) decision boundaries (interior)
+    bits: int,
+    d: int,
+) -> mx.array:
+    """
+    Fused Metal kernel: searchsorted + bit-pack in one GPU dispatch.
+
+    Takes rotated float values and codebook boundaries, returns packed uint8 indices.
+    Eliminates intermediate arrays from separate searchsorted and pack steps.
+    """
+    eff_bits, vals_per_byte = _get_packing_params(bits)
+    packed_d = (d + vals_per_byte - 1) // vals_per_byte
+    n_boundaries = boundaries.shape[0]
+
+    # Flatten batch dims
+    orig_shape = rotated.shape
+    flat = rotated.reshape(-1, d).astype(mx.float32)
+    n_batch = flat.shape[0]
+
+    cache_key = ("encode", bits, d, packed_d, n_boundaries)
+    if cache_key not in _mse_encode_kernel_cache:
+        source = get_mse_encode_source(n_boundaries, bits, d, packed_d)
+        _mse_encode_kernel_cache[cache_key] = mx.fast.metal_kernel(
+            name=f"turboquant_mse_encode_b{bits}_d{d}",
+            input_names=["rotated", "boundaries"],
+            output_names=["out"],
+            source=source,
+        )
+
+    kernel = _mse_encode_kernel_cache[cache_key]
+    boundaries = boundaries.astype(mx.float32)
+
+    out = kernel(
+        inputs=[flat, boundaries],
+        output_shapes=[(n_batch, packed_d)],
+        output_dtypes=[mx.uint8],
+        grid=(packed_d, n_batch, 1),
+        threadgroup=(min(packed_d, 256), 1, 1),
+    )
+
+    batch_shape = orig_shape[:-1]
+    return out[0].reshape(*batch_shape, packed_d)
 
 
 def turboquant_mse_score_metal(

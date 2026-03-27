@@ -146,10 +146,19 @@ class TurboQuantMSE:
         # Apply random rotation
         y = B.matmul(B.to_float(x_unit), B.transpose(self.Pi, 0, 1))
 
-        # Quantize each coordinate via searchsorted
-        indices = B.searchsorted(self.decision_boundaries, y)
+        # Fused Metal encode (searchsorted + bit-pack) when available
+        if self._backend_name != "pytorch":
+            try:
+                from turboquant_mac.backends.metal_kernels import turboquant_mse_encode_metal
+                packed = turboquant_mse_encode_metal(
+                    y, self.decision_boundaries, self.bits, self.dim,
+                )
+                return MSEQuantized(indices=packed, norms=norms, bits=self.bits)
+            except Exception:
+                pass
 
-        # Bit-pack
+        # Fallback: searchsorted + separate bit-pack
+        indices = B.searchsorted(self.decision_boundaries, y)
         packed = _pack_indices(indices, self.bits, B)
         return MSEQuantized(indices=packed, norms=norms, bits=self.bits)
 
@@ -245,17 +254,70 @@ class TurboQuantProd:
 
         return x_mse + x_qjl
 
-    def attention_score(self, query, quantized_key: ProdQuantized):
-        """
-        Compute attention scores <query, key> using quantized keys.
+    def _attention_score_metal(self, query, quantized_key: ProdQuantized):
+        """Compute attention scores using fused Metal kernels (MLX only)."""
+        from turboquant_mac.backends.metal_kernels import turboquant_attention_score_metal
 
-        Args:
-            query: (..., n_q, d) — the query vectors
-            quantized_key: ProdQuantized with shapes (..., n_k, ...)
+        # Metal path expects (BH, D) for query — flatten batch dims
+        orig_shape = query.shape  # (..., n_q, d)
+        batch_dims = orig_shape[:-2]
+        n_q = orig_shape[-2]
 
-        Returns:
-            scores: (..., n_q, n_k) — the attention logits
-        """
+        # Flatten batch dims + n_q into single BH dimension
+        flat_query = query.reshape(-1, self.dim)  # (BH*n_q, D)
+
+        # For quantized data, flatten batch dims: (..., N, packed_d) -> (BH, N, packed_d)
+        n_k = quantized_key.mse_indices.shape[-2]
+        packed_d = quantized_key.mse_indices.shape[-1]
+        packed_d_signs = quantized_key.qjl_signs.shape[-1]
+
+        flat_mse = quantized_key.mse_indices.reshape(-1, n_k, packed_d)
+        flat_signs = quantized_key.qjl_signs.reshape(-1, n_k, packed_d_signs)
+        flat_norms = quantized_key.norms.reshape(-1, n_k)
+        flat_res_norms = quantized_key.residual_norms.reshape(-1, n_k)
+
+        n_batch_heads = flat_mse.shape[0]
+
+        # Metal kernel expects (BH, D) query — run per-query if n_q > 1
+        import mlx.core as mx
+        if n_q == 1:
+            scores_flat = turboquant_attention_score_metal(
+                query=flat_query.reshape(n_batch_heads, self.dim),
+                mse_packed=flat_mse,
+                qjl_signs=flat_signs,
+                norms=flat_norms,
+                residual_norms=flat_res_norms,
+                Pi=self.mse_quantizer.Pi,
+                S=self.S,
+                centroids=self.mse_quantizer.centroids,
+                mse_bits=quantized_key.mse_bits,
+                qjl_scale=self.qjl_scale,
+            )
+            return scores_flat.reshape(*batch_dims, 1, n_k)
+        else:
+            # Multi-query: tile quantized data and batch all queries together
+            # Repeat quantized data n_q times along batch dim
+            tiled_mse = mx.repeat(flat_mse, n_q, axis=0)
+            tiled_signs = mx.repeat(flat_signs, n_q, axis=0)
+            tiled_norms = mx.repeat(flat_norms, n_q, axis=0)
+            tiled_res_norms = mx.repeat(flat_res_norms, n_q, axis=0)
+
+            scores_flat = turboquant_attention_score_metal(
+                query=flat_query,
+                mse_packed=tiled_mse,
+                qjl_signs=tiled_signs,
+                norms=tiled_norms,
+                residual_norms=tiled_res_norms,
+                Pi=self.mse_quantizer.Pi,
+                S=self.S,
+                centroids=self.mse_quantizer.centroids,
+                mse_bits=quantized_key.mse_bits,
+                qjl_scale=self.qjl_scale,
+            )
+            return scores_flat.reshape(*batch_dims, n_q, n_k)
+
+    def _attention_score_python(self, query, quantized_key: ProdQuantized):
+        """Compute attention scores using Python path (any backend)."""
         B = self.B
 
         # Stage 1: MSE contribution
@@ -275,6 +337,27 @@ class TurboQuantProd:
         scores_qjl = scores_qjl * (self.qjl_scale * B.unsqueeze(quantized_key.residual_norms, -2))
 
         return scores_mse + scores_qjl
+
+    def attention_score(self, query, quantized_key: ProdQuantized):
+        """
+        Compute attention scores <query, key> using quantized keys.
+
+        Auto-selects Metal kernels on MLX backend for fused GPU computation,
+        falling back to Python path on PyTorch or when Metal is unavailable.
+
+        Args:
+            query: (..., n_q, d) — the query vectors
+            quantized_key: ProdQuantized with shapes (..., n_k, ...)
+
+        Returns:
+            scores: (..., n_q, n_k) — the attention logits
+        """
+        if self._backend_name != "pytorch":
+            try:
+                return self._attention_score_metal(query, quantized_key)
+            except Exception:
+                pass
+        return self._attention_score_python(query, quantized_key)
 
     def forward(self, x):
         """Quantize and immediately dequantize (for testing)."""

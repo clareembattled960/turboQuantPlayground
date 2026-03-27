@@ -35,11 +35,9 @@ def transpose(t: mx.array, dim0: int, dim1: int) -> mx.array:
 
 
 def searchsorted(sorted_seq: mx.array, values: mx.array) -> mx.array:
-    # MLX doesn't have searchsorted; use numpy fallback
-    sorted_np = np.array(sorted_seq)
-    values_np = np.array(values)
-    result_np = np.searchsorted(sorted_np, values_np)
-    return mx.array(result_np)
+    # Pure MLX: broadcast-compare values against all boundaries, sum hits.
+    # For TurboQuant codebooks (1-15 boundaries), this is fast and stays on GPU.
+    return mx.sum(mx.expand_dims(values, -1) >= sorted_seq, axis=-1).astype(mx.int32)
 
 
 def norm(t: mx.array, dim: int = -1, keepdim: bool = False) -> mx.array:
