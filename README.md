@@ -343,6 +343,39 @@ python notebooks/04_kv_cache_demo.py              # Full KV cache + needle-in-ha
 - **Companion papers**: [PolarQuant (AISTATS 2026)](https://arxiv.org/abs/2502.02617), [QJL (AAAI 2025)](https://arxiv.org/abs/2406.03482)
 - **Upstream implementations**: [0xSero/turboquant](https://github.com/0xSero/turboquant) (Triton), [tonbistudio/turboquant-pytorch](https://github.com/tonbistudio/turboquant-pytorch) (PyTorch)
 
+## Project Ecosystem
+
+| Repo | Purpose |
+|------|---------|
+| [turboQuantPlayground](https://github.com/yzamari/turboQuantPlayground) (this repo) | Core algorithm, Metal kernels, codebooks, educational notebooks |
+| [mlx-turboquant](https://github.com/yzamari/mlx-turboquant) | MLX-LM integration: chat REPL (`mlx-tq-chat`), OpenAI API server (`mlx-tq-server`), model inference |
+| [mlx-fork](https://github.com/yzamari/mlx-fork/tree/feature/turboquant-attention) | Fork of Apple's MLX with native `mx.fast.turboquant_attention()` kernel ([PR #3340](https://github.com/ml-explore/mlx/pull/3340)) |
+| [turboquant-bench](https://github.com/yzamari/turboquant-bench) | All-in-one comparison benchmarks |
+
+### Quick start: chat with a model
+
+```bash
+# Install mlx-turboquant
+git clone https://github.com/yzamari/mlx-turboquant.git
+cd mlx-turboquant && python3.12 -m venv venv && source venv/bin/activate
+pip install -e ".[server]"
+
+# Chat (like Ollama) — TurboQuant compression is automatic
+mlx-tq-chat --model mlx-community/Qwen2.5-3B-Instruct-4bit
+
+# Or start an OpenAI-compatible API server
+mlx-tq-server --model mlx-community/Qwen2.5-3B-Instruct-4bit --port 8000
+```
+
+### Long-context performance (M4 Pro 48GB, Qwen2.5-3B)
+
+| Context | Standard | TurboQuant | Speedup |
+|:---:|:---:|:---:|:---:|
+| 4K | 83 tok/s | 112 tok/s | **1.3x** |
+| 16K | 58 tok/s | 113 tok/s | **2.0x** |
+| 64K | 22 tok/s | 99 tok/s | **4.5x** |
+| 128K | 14 tok/s | 94 tok/s | **7.0x** |
+
 ## Citation
 
 If you use this code in your research, please cite the original TurboQuant paper:
